@@ -46,7 +46,25 @@ function BreakevenLabel({ viewBox, value }) {
 
 // ─── PayoffChart ──────────────────────────────────────────────────────────────
 
-export default function PayoffChart({ strategy, params }) {
+// ─── Replay Price Label ───────────────────────────────────────────────────────
+
+function ReplayLabel({ viewBox, pnl }) {
+  const { x, y } = viewBox
+  const isProfit = pnl >= 0
+  const color = isProfit ? '#22c55e' : '#ef4444'
+  const text = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`
+  const width = Math.max(text.length * 7, 56)
+  return (
+    <g>
+      <rect x={x - width / 2} y={y - 24} width={width} height={18} rx={4} fill={color} fillOpacity={0.9} />
+      <text x={x} y={y - 11} textAnchor="middle" fill="#fff" fontSize={11} fontWeight={700}>
+        {text}
+      </text>
+    </g>
+  )
+}
+
+export default function PayoffChart({ strategy, params, replayPrice = null }) {
   const data = useMemo(() => generateChartData(strategy, params), [strategy, params])
 
   const stats = useMemo(() => strategy.getStats(params), [strategy, params])
@@ -65,6 +83,8 @@ export default function PayoffChart({ strategy, params }) {
   const xMax = data[data.length - 1]?.price
 
   const breakevenPoints = stats.breakevens ?? []
+
+  const replayPnl = replayPrice != null ? strategy.calculate(params, replayPrice) : null
 
   return (
     <div className="card w-full">
@@ -170,6 +190,16 @@ export default function PayoffChart({ strategy, params }) {
             activeDot={false}
             legendType="none"
           />
+
+          {/* Replay price marker — animated */}
+          {replayPrice != null && replayPnl != null && (
+            <ReferenceLine
+              x={replayPrice}
+              stroke={replayPnl >= 0 ? '#22c55e' : '#ef4444'}
+              strokeWidth={2.5}
+              label={<ReplayLabel pnl={replayPnl} />}
+            />
+          )}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

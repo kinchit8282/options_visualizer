@@ -1,31 +1,49 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import StrategySelector from './components/StrategySelector.jsx'
 import StrategySimulator from './pages/StrategySimulator.jsx'
 import MarketData from './pages/MarketData.jsx'
-
-const TABS = [
-  { id: 'simulator', label: 'Strategy Simulator', icon: '⚡' },
-  { id: 'market', label: 'Market Data', icon: '📊' },
-]
+import EventReplayPage from './pages/EventReplayPage.jsx'
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('simulator')
+  const [activePage, setActivePage] = useState('split')   // 'split' | 'replay'
   const [selectedStrategyId, setSelectedStrategyId] = useState('bullCallSpread')
-  // Overrides from Market Data → Simulator handoff
   const [simulatorOverrides, setSimulatorOverrides] = useState(null)
+  const [splitPercent, setSplitPercent] = useState(50)
+  const isDragging = useRef(false)
+  const containerRef = useRef(null)
 
-  // Called by MarketData when user clicks "Use ↗" on a chain row
   const handleLoadIntoSimulator = useCallback(({ strategyId, overrides }) => {
     setSelectedStrategyId(strategyId)
     setSimulatorOverrides(overrides)
-    setActiveTab('simulator')
+    setActivePage('split')
   }, [])
 
-  // Clear overrides once consumed by simulator (via key prop reset)
   const simulatorKey = `${selectedStrategyId}-${JSON.stringify(simulatorOverrides)}`
 
+  const handleMouseDown = useCallback((e) => {
+    e.preventDefault()
+    isDragging.current = true
+  }, [])
+
+  const handleMouseMove = useCallback((e) => {
+    if (!isDragging.current || !containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percent = Math.min(Math.max((x / rect.width) * 100, 25), 75)
+    setSplitPercent(percent)
+  }, [])
+
+  const handleMouseUp = useCallback(() => {
+    isDragging.current = false
+  }, [])
+
   return (
-    <div className="min-h-screen bg-surface-900 flex flex-col">
+    <div
+      className="min-h-screen bg-surface-900 flex flex-col select-none"
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
       {/* ── Top header ── */}
       <header className="border-b border-surface-600 bg-surface-800 px-6 py-0 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3 py-3">
@@ -34,50 +52,97 @@ export default function App() {
           <span className="text-[10px] text-gray-600 hidden sm:block">educational · not financial advice</span>
         </div>
 
-        {/* Tab switcher */}
-        <div className="flex">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-3.5 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
+        {/* Navigation */}
+        <nav className="flex">
+          <button
+            onClick={() => setActivePage('split')}
+            className={`flex items-center gap-1.5 px-4 py-3.5 text-sm font-medium border-b-2 transition-colors ${
+              activePage === 'split'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <span>⚡</span>
+            <span>Market &amp; Simulator</span>
+          </button>
+          <button
+            onClick={() => setActivePage('replay')}
+            className={`flex items-center gap-1.5 px-4 py-3.5 text-sm font-medium border-b-2 transition-colors ${
+              activePage === 'replay'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <span>🎬</span>
+            <span>Event Replay</span>
+          </button>
+        </nav>
       </header>
 
       {/* ── Body ── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden flex flex-col">
 
-        {/* Sidebar — only shown on Simulator tab */}
-        {activeTab === 'simulator' && (
-          <nav className="w-64 shrink-0 border-r border-surface-600 bg-surface-800 p-4 overflow-y-auto">
-            <StrategySelector selectedId={selectedStrategyId} onSelect={(id) => {
-              setSelectedStrategyId(id)
-              setSimulatorOverrides(null)
-            }} />
-          </nav>
+        {activePage === 'replay' ? (
+          <EventReplayPage />
+        ) : (
+          /* ── Split window: Market Data | Simulator ── */
+          <div ref={containerRef} className="flex flex-1 overflow-hidden">
+
+            {/* Left panel: Market Data */}
+            <div style={{ width: `${splitPercent}%` }} className="flex flex-col overflow-hidden border-r border-surface-600">
+              <div className="px-4 py-2 border-b border-surface-600 bg-surface-800 shrink-0">
+                <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">📊 Market Data</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <MarketData onLoadIntoSimulator={handleLoadIntoSimulator} />
+              </div>
+            </div>
+
+            {/* Draggable divider */}
+            <div
+              onMouseDown={handleMouseDown}
+              className="w-1.5 shrink-0 bg-surface-700 hover:bg-accent active:bg-accent cursor-col-resize transition-colors relative group"
+              title="Drag to resize"
+            >
+              <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-60 transition-opacity">
+                <span className="w-0.5 h-0.5 rounded-full bg-white" />
+                <span className="w-0.5 h-0.5 rounded-full bg-white" />
+                <span className="w-0.5 h-0.5 rounded-full bg-white" />
+              </div>
+            </div>
+
+            {/* Right panel: Strategy Simulator */}
+            <div style={{ width: `calc(${100 - splitPercent}% - 6px)` }} className="flex overflow-hidden">
+              <nav className="w-52 shrink-0 border-r border-surface-600 bg-surface-800 overflow-y-auto">
+                <div className="px-3 py-2 border-b border-surface-600">
+                  <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">Strategies</span>
+                </div>
+                <div className="p-3">
+                  <StrategySelector
+                    selectedId={selectedStrategyId}
+                    onSelect={(id) => {
+                      setSelectedStrategyId(id)
+                      setSimulatorOverrides(null)
+                    }}
+                  />
+                </div>
+              </nav>
+
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <div className="px-4 py-2 border-b border-surface-600 bg-surface-800 shrink-0">
+                  <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">⚡ Strategy Simulator</span>
+                </div>
+                <main className="flex-1 overflow-y-auto p-4">
+                  <StrategySimulator
+                    key={simulatorKey}
+                    strategyId={selectedStrategyId}
+                    initialOverrides={simulatorOverrides}
+                  />
+                </main>
+              </div>
+            </div>
+          </div>
         )}
-
-        {/* Main content */}
-        <main className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'simulator' ? (
-            <StrategySimulator
-              key={simulatorKey}
-              strategyId={selectedStrategyId}
-              initialOverrides={simulatorOverrides}
-            />
-          ) : (
-            <MarketData onLoadIntoSimulator={handleLoadIntoSimulator} />
-          )}
-        </main>
       </div>
     </div>
   )
